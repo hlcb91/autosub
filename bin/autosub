@@ -130,13 +130,26 @@ def which(program):
     return None
 
 
-def extract_audio(filename, channels=1, rate=16000):
+def extract_audio(filename, channels=1, rate=16000, keep_wav=False):
+    if keep_wav:
+        if ((filename[-4:] == '.mkv' or filename[-4:] == '.mp4' or filename[-4:] == '.avi' or filename[-4:] == '.flv') and os.path.isfile(filename[0:-4] + '.wav') ):
+            return filename[0:-4] + '.wav', rate
+        if not os.path.isfile(filename):
+            print("The given file does not exist: {0}".format(filename))
+            raise Exception("Invalid filepath: {0}".format(filename))
+        if not which("ffmpeg"):
+            print("ffmpeg: Executable not found on machine.")
+            raise Exception("Dependency not found: ffmpeg")
+        temp = open(filename[0:-4] + '.wav', 'w+')
+        command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+        subprocess.check_output(command, stdin=open(os.devnull))
+        return temp.name, rate
     temp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
     if not os.path.isfile(filename):
-        print "The given file does not exist: {0}".format(filename)
+        print("The given file does not exist: {0}".format(filename))
         raise Exception("Invalid filepath: {0}".format(filename))
     if not which("ffmpeg"):
-        print "ffmpeg: Executable not found on machine."
+        print("ffmpeg: Executable not found on machine.")
         raise Exception("Dependency not found: ffmpeg")
     command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
     subprocess.check_output(command, stdin=open(os.devnull))
@@ -194,9 +207,13 @@ def main():
     parser.add_argument('-D', '--dst-language', help="Desired language for the subtitles", default="en")
     parser.add_argument('-K', '--api-key',
                         help="The Google Translate API key to be used. (Required for subtitle translation)")
-    parser.add_argument('-T', '--threshold', help="Threshold,for level noise ", default=0.2,type=float)
+    parser.add_argument('-AC', '--channels', help="Number of audio channels in the WAV file", type=int, default=1)
+    parser.add_argument('-AR', '--rate', help="Number of audio sampling rate (in Hz) in the WAV file", type=int, default=16000)
+    parser.add_argument('-T', '--threshold', help="Threshold,for level noise", default=0.2,type=float)
+    parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
     parser.add_argument('--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('--list-languages', help="List all available source/destination languages", action='store_true')
+    parser.set_defaults(keep_wav=False)
 
     args = parser.parse_args()
 
@@ -229,7 +246,7 @@ def main():
         print("Error: You need to specify a source path.")
         return 1
 
-    audio_filename, audio_rate = extract_audio(args.source_path)
+    audio_filename, audio_rate = extract_audio(args.source_path, channels=args.channels, rate=args.rate, keep_wav=args.keep_wav)
 
     regions = find_speech_regions(filename=audio_filename, frame_width=4096, min_region_size=0.5, max_region_size=6, dthreshold=args.threshold)
 
@@ -271,15 +288,15 @@ def main():
                     pbar.finish()
                     transcripts = translated_transcripts
                 else:
-                    print "Error: Subtitle translation requires specified Google Translate API key. \
-                    See --help for further information."
+                    print("Error: Subtitle translation requires specified Google Translate API key. \
+                    See --help for further information.")
                     return 1
 
         except KeyboardInterrupt:
             pbar.finish()
             pool.terminate()
             pool.join()
-            print "Cancelling transcription"
+            print("Cancelling transcription")
             return 1
 
     timed_subtitles = [(r, t) for r, t in zip(regions, transcripts) if t]
@@ -295,9 +312,11 @@ def main():
     with open(dest, 'wb') as f:
         f.write(formatted_subtitles.encode("utf-8"))
 
-    print "Subtitles file created at {}".format(dest)
+    print("Subtitles file created at {}".format(dest))
 
-    os.remove(audio_filename)
+    if not args.keep_wav:
+        if os.path.isfile(audio_filename):
+            os.remove(audio_filename)
 
     return 0
 
