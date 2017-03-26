@@ -209,7 +209,13 @@ def main():
                         help="The Google Translate API key to be used. (Required for subtitle translation)")
     parser.add_argument('-AC', '--channels', help="Number of audio channels in the WAV file", type=int, default=1)
     parser.add_argument('-AR', '--rate', help="Number of audio sampling rate (in Hz) in the WAV file", type=int, default=16000)
+    parser.add_argument('-FW', '--frame-width', help="Frame width", type=int, default=4096)
+    parser.add_argument('-MI', '--min-region-size', help="Minimum region size", default=0.5,type=float)
+    parser.add_argument('-MA', '--max-region-size', help="Maximum region size", type=int, default=6)
     parser.add_argument('-T', '--threshold', help="Threshold,for level noise", default=0.2,type=float)
+    parser.add_argument('-IB', '--include-before', help="Include before", default=0.25,type=float)
+    parser.add_argument('-IA', '--include-after', help="Include after", default=0.25,type=float)
+    parser.add_argument('-R', '--retries', help="Retries", type=int, default=3)
     parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
     parser.add_argument('--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('--list-languages', help="List all available source/destination languages", action='store_true')
@@ -248,11 +254,11 @@ def main():
 
     audio_filename, audio_rate = extract_audio(args.source_path, channels=args.channels, rate=args.rate, keep_wav=args.keep_wav)
 
-    regions = find_speech_regions(filename=audio_filename, frame_width=4096, min_region_size=0.5, max_region_size=6, dthreshold=args.threshold)
+    regions = find_speech_regions(filename=audio_filename, frame_width=args.frame_width, min_region_size=args.min_region_size, max_region_size=args.max_region_size, dthreshold=args.threshold)
 
     pool = multiprocessing.Pool(args.concurrency)
-    converter = FLACConverter(source_path=audio_filename)
-    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, api_key=GOOGLE_SPEECH_API_KEY)
+    converter = FLACConverter(source_path=audio_filename, include_before=args.include_before, include_after=args.include_after)
+    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY)
 
     transcripts = []
     if regions:
