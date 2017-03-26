@@ -35,17 +35,37 @@ def is_same_language(lang1, lang2):
 
 
 class FLACConverter(object):
-    def __init__(self, source_path, include_before=0.25, include_after=0.25):
+    def __init__(self, source_path, include_before=0.25, include_after=0.25, keep_flac=False):
         self.source_path = source_path
         self.include_before = include_before
         self.include_after = include_after
+        self.keep_flac = keep_flac
 
     def __call__(self, region):
+        if self.keep_flac:
+            try:
+                counter, start, end = region
+                start = max(0, start - self.include_before)
+                end += self.include_after
+                temp_folder = os.path.dirname(self.source_path) + "/" + "regions"
+                temp_file = temp_folder + "/" + str(counter) + ".flac"
+                if not os.path.isdir(temp_folder):
+                    os.makedirs(temp_folder, 0777)
+                if os.path.isfile(temp_file):
+                    temp = open(temp_file, 'a+')
+                else:
+                    temp = open(temp_file, 'w+')
+                    command = ["ffmpeg","-ss", str(start), "-t", str(end - start), "-y", "-i", self.source_path, "-loglevel", "error", temp.name]
+                    subprocess.check_output(command, stdin=open(os.devnull))
+                return temp.read()
+
+            except KeyboardInterrupt:
+                return
         try:
             counter, start, end = region
             start = max(0, start - self.include_before)
             end += self.include_after
-            temp = tempfile.NamedTemporaryFile(suffix='.flac')
+            temp = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
             command = ["ffmpeg","-ss", str(start), "-t", str(end - start),
                        "-y", "-i", self.source_path,
                        "-loglevel", "error", temp.name]
@@ -218,9 +238,11 @@ def main():
     parser.add_argument('-IA', '--include-after', help="Include after", default=0.25,type=float)
     parser.add_argument('-R', '--retries', help="Retries", type=int, default=3)
     parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
+    parser.add_argument('--keep-flac', help="Keeps the FLAC files in the same folder as the video", action='store_true')
     parser.add_argument('--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('--list-languages', help="List all available source/destination languages", action='store_true')
     parser.set_defaults(keep_wav=False)
+    parser.set_defaults(keep_flac=False)
 
     args = parser.parse_args()
 
@@ -258,7 +280,7 @@ def main():
     regions = find_speech_regions(filename=audio_filename, frame_width=args.frame_width, min_region_size=args.min_region_size, max_region_size=args.max_region_size, dthreshold=args.threshold)
 
     pool = multiprocessing.Pool(args.concurrency)
-    converter = FLACConverter(source_path=audio_filename, include_before=args.include_before, include_after=args.include_after)
+    converter = FLACConverter(source_path=audio_filename, include_before=args.include_before, include_after=args.include_after, keep_flac=args.keep_flac)
     recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY)
 
     transcripts = []
