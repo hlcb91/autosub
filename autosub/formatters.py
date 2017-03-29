@@ -31,11 +31,11 @@ def vtt_formatter(subtitles, show_before=0, show_after=0):
     return text
 
 def json_formatter(subtitles):
-    subtitle_dicts = map(lambda (r, t): {'start': r[0], 'end': r[1], 'content': t}, subtitles)
+    subtitle_dicts = map(lambda r, t: {'start': r[0], 'end': r[1], 'content': t}, subtitles)
     return json.dumps(subtitle_dicts)
 
 def raw_formatter(subtitles):
-    return ' '.join(map(lambda (rng, text): text, subtitles))
+    return ' '.join(map(lambda rng, text: text, subtitles))
 
 FORMATTERS = {
     'srt': srt_formatter,
