@@ -35,6 +35,16 @@ def unique_hash(filepath, blocksize=2**20):
             return s.hexdigest().lower()
 
 
+def hashcode(s):
+    if type(s) in (str, unicode):
+        h = 0
+        for c in s:
+            h = (31 * h + ord(c)) & 0xFFFFFFFF
+        return ((h + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+    if type(s) in (int):
+        return s
+
+
 def percentile(arr, percent):
     arr = sorted(arr)
     k = (len(arr) - 1) * percent
@@ -182,13 +192,15 @@ class SpeechRecognizer(object):
 
 
 class Translator(object):
-    def __init__(self, language, api_key, src, dst):
+    def __init__(self, language, api_key, src, dst, cache=False, folder=None):
         self.language = language
         self.api_key = api_key
         self.service = build('translate', 'v2',
                              developerKey=self.api_key)
         self.src = src
         self.dst = dst
+        self.cache = cache
+        self.folder = folder
 
     def __call__(self, sentence):
         counter = None
@@ -199,6 +211,22 @@ class Translator(object):
             sentence = sentence
         else:
             return None
+        if counter is None:
+            counter = hashcode(sentence)
+        if self.cache and self.folder and counter is not None:
+            file = self.folder + "/" + str(counter) + ".json"
+            if os.path.isfile(file):
+                fp = open(file, 'rb')
+                result = fp.read()
+                fp.close()
+                result = json.loads(result)
+                if not 'translations' in result:
+                    return ''
+                if len(result['translations']) == 0:
+                    return ''
+                if not 'translatedText' in result['translations'][0]:
+                    return ''
+                return result['translations'][0]['translatedText']
         try:
             if not sentence: return
             result = self.service.translations().list(
@@ -208,6 +236,13 @@ class Translator(object):
             ).execute()
             if 'translations' in result and len(result['translations']) and \
                             'translatedText' in result['translations'][0]:
+                if self.cache and self.folder and counter is not None:
+                    file = self.folder + "/" + str(counter) + ".json"
+                    if not os.path.isdir(self.folder):
+                        os.makedirs(self.folder, 0o777)
+                    fp = open(file, 'w')
+                    fp.write(json.dumps(result))
+                    fp.close()
                 return result['translations'][0]['translatedText']
             return ""
 
@@ -322,11 +357,13 @@ def main():
     parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
     parser.add_argument('--keep-flac', help="Keeps the FLAC files in the same folder as the video", action='store_true')
     parser.add_argument('--cache-speech-requests', help="Cache Google Speech requests", action='store_true')
+    parser.add_argument('--cache-translator-requests', help="Cache Google Translate requests", action='store_true')
     parser.add_argument('--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('--list-languages', help="List all available source/destination languages", action='store_true')
     parser.set_defaults(keep_wav=False)
     parser.set_defaults(keep_flac=False)
     parser.set_defaults(cache_speech_requests=False)
+    parser.set_defaults(cache_translator_requests=False)
 
     args = parser.parse_args()
 
@@ -390,7 +427,7 @@ def main():
                 if args.api_key:
                     google_translate_api_key = args.api_key
                     translator = Translator(args.dst_language, google_translate_api_key, dst=args.dst_language,
-                                            src=args.src_language)
+                                            src=args.src_language, cache=args.cache_translator_requests, folder=os.path.dirname(args.source_path) + "/translations")
                     prompt = "Translating from {0} to {1}: ".format(args.src_language, args.dst_language)
                     widgets = [prompt, Percentage(), ' ', Bar(), ' ', ETA()]
                     pbar = ProgressBar(widgets=widgets, maxval=len(regions)).start()
