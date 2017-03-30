@@ -42,11 +42,22 @@ class FLACConverter(object):
         self.keep_flac = keep_flac
 
     def __call__(self, region):
-        if self.keep_flac:
-            try:
+        counter = None
+        start = None
+        end = None
+        if type(region) is tuple or type(region) is list:
+            if len(region) == 3:
                 counter, start, end = region
-                start = max(0, start - self.include_before)
-                end += self.include_after
+            elif len(region) == 2:
+                start, end = region
+            else:
+                return None
+        else:
+            return None
+        start = max(0, start - self.include_before)
+        end += self.include_after
+        if self.keep_flac and counter is not None:
+            try:
                 temp_folder = os.path.dirname(self.source_path) + "/" + "regions"
                 temp_file = temp_folder + "/" + str(counter) + ".flac"
                 if not os.path.isdir(temp_folder):
@@ -62,13 +73,8 @@ class FLACConverter(object):
             except KeyboardInterrupt:
                 return
         try:
-            counter, start, end = region
-            start = max(0, start - self.include_before)
-            end += self.include_after
             temp = tempfile.NamedTemporaryFile(suffix='.flac')
-            command = ["ffmpeg","-ss", str(start), "-t", str(end - start),
-                       "-y", "-i", self.source_path,
-                       "-loglevel", "error", temp.name]
+            command = ["ffmpeg","-ss", str(start), "-t", str(end - start), "-y", "-i", self.source_path, "-loglevel", "error", temp.name]
             subprocess.check_output(command, stdin=open(os.devnull))
             return temp.read()
 
@@ -84,6 +90,14 @@ class SpeechRecognizer(object):
         self.retries = retries
 
     def __call__(self, data):
+        counter = None
+        if type(data) is tuple or type(data) is list:
+            counter = data[0]
+            data = data[1]
+        elif type(data) is str:
+            data = data
+        else:
+            return None
         try:
             for i in range(self.retries):
                 url = GOOGLE_SPEECH_API_URL.format(lang=self.language, key=self.api_key)
@@ -94,13 +108,19 @@ class SpeechRecognizer(object):
                 except requests.exceptions.ConnectionError:
                     continue
 
+                if resp.status_code != 200:
+                    continue
+
                 for line in resp.content.split("\n"):
                     try:
+                        if not line:
+                            continue
+                        if line == '{"result":[]}':
+                            continue
                         line = json.loads(line)
-                        line = line['result'][0]['alternative'][0]['transcript']
-                        return line[:1].upper() + line[1:]
+                        transcript = line['result'][0]['alternative'][0]['transcript']
+                        return transcript[:1].upper() + transcript[1:]
                     except:
-                        # no result
                         continue
 
         except KeyboardInterrupt:
@@ -117,6 +137,14 @@ class Translator(object):
         self.dst = dst
 
     def __call__(self, sentence):
+        counter = None
+        if type(sentence) is tuple or type(sentence) is list:
+            counter = sentence[0]
+            sentence = sentence[1]
+        elif type(sentence) is str:
+            sentence = sentence
+        else:
+            return None
         try:
             if not sentence: return
             result = self.service.translations().list(
@@ -290,7 +318,7 @@ def main():
             pbar = ProgressBar(widgets=widgets, maxval=len(regions)).start()
             extracted_regions = []
             for i, extracted_region in enumerate(pool.imap(converter, regions)):
-                extracted_regions.append(extracted_region)
+                extracted_regions.append((i, extracted_region))
                 pbar.update(i)
             pbar.finish()
 
@@ -298,7 +326,7 @@ def main():
             pbar = ProgressBar(widgets=widgets, maxval=len(regions)).start()
 
             for i, transcript in enumerate(pool.imap(recognizer, extracted_regions)):
-                transcripts.append(transcript)
+                transcripts.append((i, transcript))
                 pbar.update(i)
             pbar.finish()
 
@@ -312,7 +340,7 @@ def main():
                     pbar = ProgressBar(widgets=widgets, maxval=len(regions)).start()
                     translated_transcripts = []
                     for i, transcript in enumerate(pool.imap(translator, transcripts)):
-                        translated_transcripts.append(transcript)
+                        translated_transcripts.append((i, transcript))
                         pbar.update(i)
                     pbar.finish()
                     transcripts = translated_transcripts
