@@ -11,12 +11,28 @@ import subprocess
 import sys
 import tempfile
 import wave
+from hashlib import sha1
 
 from progressbar import ProgressBar, Percentage, Bar, ETA
 
 from autosub.constants import LANGUAGE_CODES, \
     GOOGLE_SPEECH_API_KEY, GOOGLE_SPEECH_API_URL
 from autosub.formatters import FORMATTERS
+
+def unique_hash(filepath, blocksize=2**20):
+    s = sha1()
+    if type(filepath) in (str, unicode):
+        if filepath[:8] == '\x66\x4c\x61\x43\x00\x00\x00\x22':
+            s.update(filepath)
+            return s.hexdigest().lower()
+        if '\x00' not in filepath and os.path.isfile(filepath):
+            with open(filepath , "rb") as f:
+                while True:
+                    buf = f.read(blocksize)
+                    if not buf:
+                        break
+                    s.update(buf)
+            return s.hexdigest().lower()
 
 
 def percentile(arr, percent):
@@ -100,13 +116,21 @@ class SpeechRecognizer(object):
             data = data
         else:
             return None
+        if counter is None:
+            counter = unique_hash(data)
         if self.cache and self.folder and counter is not None:
             file = self.folder + "/" + str(counter) + ".json"
             if os.path.isfile(file):
                 fp = open(file, 'rb')
                 line = fp.read()
                 fp.close()
+                if line == '{"result":[]}':
+                    return ''
                 line = json.loads(line)
+                if not 'result' in line:
+                    return ''
+                if len(line['result']) == 0:
+                    return ''
                 transcript = line['result'][0]['alternative'][0]['transcript']
                 return transcript[:1].upper() + transcript[1:]
         try:
@@ -119,10 +143,22 @@ class SpeechRecognizer(object):
                 except requests.exceptions.ConnectionError:
                     continue
 
+                body = resp.content.strip()
+
                 if resp.status_code != 200:
                     continue
 
-                for line in resp.content.split("\n"):
+                if body == '{"result":[]}':
+                    if self.cache and self.folder and counter is not None:
+                        file = self.folder + "/" + str(counter) + ".json"
+                        if not os.path.isdir(self.folder):
+                            os.makedirs(self.folder, 0o777)
+                        fp = open(file, 'w')
+                        fp.write(body)
+                        fp.close()
+                        return ''
+
+                for line in body.split("\n"):
                     try:
                         if not line:
                             continue
