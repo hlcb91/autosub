@@ -16,7 +16,7 @@ setup(
     author_email='agermanidis@gmail.com',
     url='https://github.com/agermanidis/autosub',
     packages=['autosub'],
-    scripts=['bin/autosub'],
+    scripts=['bin/autosub', 'bin/autosub_regions'],
     install_requires=[
         'google-api-python-client>=1.4.2',
         'requests>=2.3.0',
