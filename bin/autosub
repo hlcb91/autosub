@@ -83,11 +83,13 @@ class FLACConverter(object):
 
 
 class SpeechRecognizer(object):
-    def __init__(self, language="en", rate=44100, retries=3, api_key=GOOGLE_SPEECH_API_KEY):
+    def __init__(self, language="en", rate=44100, retries=3, api_key=GOOGLE_SPEECH_API_KEY, cache=False, folder=None):
         self.language = language
         self.rate = rate
         self.api_key = api_key
         self.retries = retries
+        self.cache = cache
+        self.folder = folder
 
     def __call__(self, data):
         counter = None
@@ -98,6 +100,15 @@ class SpeechRecognizer(object):
             data = data
         else:
             return None
+        if self.cache and self.folder and counter is not None:
+            file = self.folder + "/" + str(counter) + ".json"
+            if os.path.isfile(file):
+                fp = open(file, 'rb')
+                line = fp.read()
+                fp.close()
+                line = json.loads(line)
+                transcript = line['result'][0]['alternative'][0]['transcript']
+                return transcript[:1].upper() + transcript[1:]
         try:
             for i in range(self.retries):
                 url = GOOGLE_SPEECH_API_URL.format(lang=self.language, key=self.api_key)
@@ -119,6 +130,13 @@ class SpeechRecognizer(object):
                             continue
                         line = json.loads(line)
                         transcript = line['result'][0]['alternative'][0]['transcript']
+                        if self.cache and self.folder and counter is not None:
+                            file = self.folder + "/" + str(counter) + ".json"
+                            if not os.path.isdir(self.folder):
+                                os.makedirs(self.folder, 0o777)
+                            fp = open(file, 'w')
+                            fp.write(json.dumps(line))
+                            fp.close()
                         return transcript[:1].upper() + transcript[1:]
                     except:
                         continue
@@ -267,10 +285,12 @@ def main():
     parser.add_argument('-R', '--retries', help="Retries", type=int, default=3)
     parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
     parser.add_argument('--keep-flac', help="Keeps the FLAC files in the same folder as the video", action='store_true')
+    parser.add_argument('--cache-speech-requests', help="Cache Google Speech requests", action='store_true')
     parser.add_argument('--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('--list-languages', help="List all available source/destination languages", action='store_true')
     parser.set_defaults(keep_wav=False)
     parser.set_defaults(keep_flac=False)
+    parser.set_defaults(cache_speech_requests=False)
 
     args = parser.parse_args()
 
@@ -309,7 +329,7 @@ def main():
 
     pool = multiprocessing.Pool(args.concurrency)
     converter = FLACConverter(source_path=audio_filename, include_before=args.include_before, include_after=args.include_after, keep_flac=args.keep_flac)
-    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY)
+    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY, cache=args.cache_speech_requests, folder=os.path.dirname(args.source_path) + "/transcriptions")
 
     transcripts = []
     if regions:
