@@ -135,9 +135,8 @@ def main():
         base, ext = os.path.splitext(args.source_path)
         dest = "{base}.{format}".format(base=base, format="regions.json")
 
-    temp = open( dest, 'wb' )
-    temp.write( json.dumps(regions) )
-    temp.close()
+    with open(dest, 'wb') as f:
+        f.write(json.dumps(regions))
 
     print("Regions file created at {}".format(dest))
 
