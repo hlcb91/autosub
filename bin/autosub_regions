@@ -133,7 +133,7 @@ def main():
 
     if not dest:
         base, ext = os.path.splitext(args.source_path)
-        dest = "{base}.{format}".format(base=base, format="json")
+        dest = "{base}.{format}".format(base=base, format="regions.json")
 
     temp = open( dest, 'wb' )
     temp.write( json.dumps(regions) )
