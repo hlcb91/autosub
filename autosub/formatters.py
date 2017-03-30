@@ -8,6 +8,8 @@ text_type = unicode if sys.version_info < (3,) else str
 
 
 def force_unicode(s, encoding="utf-8"):
+    if type(s) is tuple or type(s) is list:
+        s = s[1]
     if isinstance(s, text_type):
         return s
     return s.decode(encoding)
@@ -16,10 +18,18 @@ def force_unicode(s, encoding="utf-8"):
 def srt_formatter(subtitles, show_before=0, show_after=0):
     f = pysrt.SubRipFile()
     for i, (rng, text) in enumerate(subtitles, 1):
+        counter = None
+        start = None
+        end = None
+        if len(rng) == 3:
+            counter, start, end = rng
+        elif len(rng) == 2:
+            start, end = rng
+        else:
+            return None
         item = pysrt.SubRipItem()
         item.index = i
         item.text = force_unicode(text)
-        start, end = rng
         item.start.seconds = max(0, start - show_before)
         item.end.seconds = end + show_after
         f.append(item)
