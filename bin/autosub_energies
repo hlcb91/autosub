@@ -1,0 +1,115 @@
+#!/usr/bin/python3
+import argparse
+import audioop
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import wave
+
+
+def which(program):
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            path = path.strip('"')
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+    return None
+
+
+def extract_audio(filename, channels=1, rate=16000, keep_wav=False):
+    if keep_wav:
+        if ((filename[-4:] == '.mkv' or filename[-4:] == '.mp4' or filename[-4:] == '.avi' or filename[-4:] == '.flv') and os.path.isfile(filename[0:-4] + '.wav') ):
+            return filename[0:-4] + '.wav', rate
+        if not os.path.isfile(filename):
+            print("The given file does not exist: {0}".format(filename))
+            raise Exception("Invalid filepath: {0}".format(filename))
+        if not which("ffmpeg"):
+            print("ffmpeg: Executable not found on machine.")
+            raise Exception("Dependency not found: ffmpeg")
+        temp = open(filename[0:-4] + '.wav', 'w+')
+        command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+        subprocess.check_output(command, stdin=open(os.devnull))
+        return temp.name, rate
+    temp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+    if not os.path.isfile(filename):
+        print("The given file does not exist: {0}".format(filename))
+        raise Exception("Invalid filepath: {0}".format(filename))
+    if not which("ffmpeg"):
+        print("ffmpeg: Executable not found on machine.")
+        raise Exception("Dependency not found: ffmpeg")
+    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+    subprocess.check_output(command, stdin=open(os.devnull))
+    return temp.name, rate
+
+
+def find_speech_energies(filename, frame_width=4096):
+    reader = wave.open(filename)
+    sample_width = reader.getsampwidth()
+    rate = reader.getframerate()
+    n_channels = reader.getnchannels()
+
+    total_duration = reader.getnframes() / rate
+    chunk_duration = float(frame_width) / rate
+
+    n_chunks = int(total_duration / chunk_duration)
+    energies = []
+
+    for i in range(n_chunks):
+        chunk = reader.readframes(frame_width)
+        energies.append(audioop.rms(chunk, sample_width * n_channels))
+
+    return energies
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source_path', help="Path to the video or audio file to regions", nargs='?')
+    parser.add_argument('-o', '--output',
+                        help="Output path for regions (by default, regions are saved in \
+                        the same directory and name as the source path)")
+    parser.add_argument('-AC', '--channels', help="Number of audio channels in the WAV file", type=int, default=1)
+    parser.add_argument('-AR', '--rate', help="Number of audio sampling rate (in Hz) in the WAV file", type=int, default=16000)
+    parser.add_argument('-FW', '--frame-width', help="Frame width", type=int, default=4096)
+    parser.add_argument('--keep-wav', help="Keeps the WAV file in the same folder as the video", action='store_true')
+    parser.set_defaults(keep_wav=False)
+
+    args = parser.parse_args()
+
+    if not args.source_path:
+        print("Error: You need to specify a source path.")
+        return 1
+
+    audio_filename, audio_rate = extract_audio(args.source_path, channels=args.channels, rate=args.rate, keep_wav=args.keep_wav)
+
+    energies = find_speech_energies(filename=audio_filename, frame_width=args.frame_width)
+
+    dest = args.output
+
+    if not dest:
+        base, ext = os.path.splitext(args.source_path)
+        dest = "{base}.{format}".format(base=base, format="energies.json")
+
+    with open(dest, 'w') as f:
+        f.write(json.dumps(energies))
+
+    print("Energies file created at {}".format(dest))
+
+    if not args.keep_wav:
+        if os.path.isfile(audio_filename):
+            os.remove(audio_filename)
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
