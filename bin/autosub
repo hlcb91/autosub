@@ -87,7 +87,10 @@ class FLACConverter(object):
                 temp_folder = os.path.dirname(self.source_path) + "/" + "regions"
                 temp_file = temp_folder + "/" + str(counter) + ".flac"
                 if not os.path.isdir(temp_folder):
-                    os.makedirs(temp_folder, 0o777)
+                    try:
+                        os.makedirs(temp_folder, 0o777)
+                    except OSError:
+                        pass
                 if os.path.isfile(temp_file):
                     temp = open(temp_file, 'a+')
                 else:
@@ -162,7 +165,10 @@ class SpeechRecognizer(object):
                     if self.cache and self.folder and counter is not None:
                         file = self.folder + "/" + str(counter) + ".json"
                         if not os.path.isdir(self.folder):
-                            os.makedirs(self.folder, 0o777)
+                            try:
+                                os.makedirs(self.folder, 0o777)
+                            except OSError:
+                                pass
                         fp = open(file, 'w')
                         fp.write(body)
                         fp.close()
@@ -179,7 +185,10 @@ class SpeechRecognizer(object):
                         if self.cache and self.folder and counter is not None:
                             file = self.folder + "/" + str(counter) + ".json"
                             if not os.path.isdir(self.folder):
-                                os.makedirs(self.folder, 0o777)
+                                try:
+                                    os.makedirs(self.folder, 0o777)
+                                except OSError:
+                                    pass
                             fp = open(file, 'w')
                             fp.write(json.dumps(line))
                             fp.close()
@@ -239,7 +248,10 @@ class Translator(object):
                 if self.cache and self.folder and counter is not None:
                     file = self.folder + "/" + str(counter) + ".json"
                     if not os.path.isdir(self.folder):
-                        os.makedirs(self.folder, 0o777)
+                        try:
+                            os.makedirs(self.folder, 0o777)
+                        except OSError:
+                            pass
                     fp = open(file, 'w')
                     fp.write(json.dumps(result))
                     fp.close()
@@ -402,7 +414,22 @@ def main():
 
     pool = multiprocessing.Pool(args.concurrency)
     converter = FLACConverter(source_path=audio_filename, include_before=args.include_before, include_after=args.include_after, keep_flac=args.keep_flac)
-    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY, cache=args.cache_speech_requests, folder=os.path.dirname(args.source_path) + "/transcriptions")
+    recognizer = SpeechRecognizer(language=args.src_language, rate=audio_rate, retries=args.retries, api_key=GOOGLE_SPEECH_API_KEY, cache=args.cache_speech_requests, folder=os.path.dirname(args.source_path) + "/" + "transcriptions")
+
+    regions_folder = os.path.dirname(args.source_path) + "/" + "regions"
+    transcriptions_foler = os.path.dirname(args.source_path) + "/" + "transcriptions"
+
+    if not os.path.isdir(regions_folder):
+        try:
+            os.makedirs(regions_folder, 0o777)
+        except OSError:
+            pass
+
+    if not os.path.isdir(transcriptions_foler):
+        try:
+            os.makedirs(transcriptions_foler, 0o777)
+        except OSError:
+            pass
 
     transcripts = []
     if regions:
