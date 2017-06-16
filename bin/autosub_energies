@@ -61,7 +61,7 @@ def find_speech_energies(filename, frame_width=4096):
     total_duration = reader.getnframes() / rate
     chunk_duration = float(frame_width) / rate
 
-    n_chunks = int(total_duration / chunk_duration)
+    n_chunks = int(math.ceil(total_duration / chunk_duration))
     energies = []
 
     for i in range(n_chunks):
