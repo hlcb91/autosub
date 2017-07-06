@@ -1,0 +1,57 @@
+#!/usr/bin/python3
+import argparse
+import json
+import os
+import pysrt
+import sys
+
+
+def find_regions_from_srt(filename):
+    try:
+        subs = pysrt.open(filename)
+    except:
+        return []
+    regions = []
+    region_counter = 0
+    for sub in subs:
+        start_time = ( ( sub.start.hours * 3600 ) + ( sub.start.minutes * 60 ) + ( sub.start.seconds ) + ( sub.start.milliseconds / 1000 ) )
+        end_time = ( ( sub.end.hours * 3600 ) + ( sub.end.minutes * 60 ) + ( sub.end.seconds ) + ( sub.end.milliseconds / 1000 ) )
+        regions.append((region_counter, start_time, end_time))
+        region_counter += 1
+    return regions
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source_path', help="Path to the subtitle file to regions", nargs='?')
+    parser.add_argument('-o', '--output',
+                        help="Output path for regions (by default, regions are saved in \
+                        the same directory and name as the source path)")
+
+    args = parser.parse_args()
+
+    if not args.source_path:
+        print("Error: You need to specify a source path.")
+        return 1
+
+    regions = find_regions_from_srt(filename=args.source_path)
+
+    if not regions:
+        print("Error: You need to specify a valid subtitle file.")
+        return 1
+
+    dest = args.output
+
+    if not dest:
+        dest = "{base}.{format}".format(base=args.source_path, format="regions.json")
+
+    with open(dest, 'w') as f:
+        f.write(json.dumps(regions))
+
+    print("Regions file created at {}".format(dest))
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
